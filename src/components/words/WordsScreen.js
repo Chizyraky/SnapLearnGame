@@ -97,4 +97,3 @@ function WordsScreen() {
 }
 
 export default WordsScreen;
-
