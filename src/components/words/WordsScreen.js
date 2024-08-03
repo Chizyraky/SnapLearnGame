@@ -1,75 +1,94 @@
-import React from "react";
+import React, { useState, useEffect } from "react";
+import { Alert, View, Text, FlatList, Button, TextInput, StyleSheet } from "react-native";
 import MaterialIcons from "@expo/vector-icons/MaterialIcons";
-import { View, Text, FlatList, Button } from "react-native";
-import styles from "./Styles";
-import { useState, useEffect } from "react";
 import { db } from "../../firebase/Firebase";
 import { collection, onSnapshot } from "firebase/firestore";
 import { addWord, removeWord } from "../../firebase/Repository";
+import styles from "./Styles";
 
 function WordsScreen() {
   const [words, setWords] = useState([]);
-  const [id, setId] = useState("");
+  const [newWord, setNewWord] = useState('');
+  const [newDefinition, setNewDefinition] = useState('');
 
-  // Chizy, you should use this code to get the list of words from the database.
-  // This code is going to provide a updated list of words from the database every time the list changes.
-  // That is, if a new word is added/removed to the database, this code will automatically update the list of words.
   useEffect(() => {
     const itemListRef = collection(db, "SnapLearn");
-
-    const subscriber = onSnapshot(itemListRef, {
-      next: (snapshot) => {
-        const words = [];
-        snapshot.docs.forEach((doc) => {
-          words.push({
-            id: doc.id,
-            ...doc.data(),
-          });
-        });
-        setWords(words);
-      },
+    const unsubscribe = onSnapshot(itemListRef, (snapshot) => {
+      const words = snapshot.docs.map((doc) => ({
+        id: doc.id,
+        ...doc.data(),
+      }));
+      setWords(words);
     });
+    return () => unsubscribe();
   }, []);
 
-  // How to add a word to the list
   const handleAddWord = async () => {
-    const id = await addWord({
-      word: "apple",
-      definition: "apple",
-      hits: 0,
-      misses: 0,
-    });
-    setId(id);
+    if (newWord && newDefinition) {
+      const wordData = {
+        word: newWord,
+        definition: newDefinition,
+        hits: 0,
+        misses: 0,
+      };
+      await addWord(wordData);
+      setNewWord('');
+      setNewDefinition('');
+    }
   };
 
-  // How to remove a word from the list
-  const handleRemoveWord = async () => {
-    removeWord(id);
+  const handleRemoveWord = async (id) => {
+    Alert.alert(
+      "Confirm Deletion",
+      "Are you sure you want to delete this word?",
+      [
+        {
+          text: "Cancel",
+          style: "cancel"
+        },
+        { 
+          text: "OK", 
+          onPress: async () => {
+            await removeWord(id);
+          }
+        }
+      ]
+    );
   };
-
+  
   return (
     <View style={styles.container}>
-      <Text>Words for the list:</Text>
-      <Button
-        title="Add Apple to the List"
-        onPress={handleAddWord}
-        color="tomato"
+      <TextInput
+        placeholder="Enter a word"
+        value={newWord}
+        onChangeText={setNewWord}
+        style={styles.input}
+      />
+      <TextInput
+        placeholder="Enter the definition"
+        value={newDefinition}
+        onChangeText={setNewDefinition}
+        style={styles.input}
       />
       <Button
-        title="Remove Apple to the List"
-        onPress={handleRemoveWord}
+        title="Add Word"
+        onPress={handleAddWord}
         color="tomato"
       />
       <FlatList
         data={words}
+        keyExtractor={(item) => item.id}
         renderItem={({ item }) => (
-          <View>
-            <View>
-              <Text>Word: {item.word}</Text>
-              <Text>Hits: {item.hits}</Text>
-              <Text>Misses: {item.misses}</Text>
-              <Text>Definition: {item.definition}</Text>
-            </View>
+          <View style={styles.wordContainer}>
+            <Text style={styles.wordText}>{item.word}</Text>
+            <Text style={styles.hitsText}>Hits: {item.hits}</Text>
+            <Text style={styles.missesText}>Misses: {item.misses}</Text>
+            <MaterialIcons
+              name="delete"
+              size={24}
+              color="red"
+              onPress={() => handleRemoveWord(item.id)}
+            />
           </View>
         )}
       />
