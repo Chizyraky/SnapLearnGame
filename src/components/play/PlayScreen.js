@@ -10,12 +10,12 @@ function PlayScreen({ setIsQuizActive }) {
   const navigation = useNavigation();
   const [isQuizStarted, setIsQuizStarted] = useState(false);
   const [words, setWords] = useState([]);
-  const [currentQuestionIndex, setCurrentQuestionIndex] = useState(0);
   const [currentQuestion, setCurrentQuestion] = useState(null);
   const [feedback, setFeedback] = useState("");
   const [feedbackColor, setFeedbackColor] = useState('black');
   const [options, setOptions] = useState([]);
   const scoreRef = useRef(0);
+  const [remainingQuestions, setRemainingQuestions] = useState([]);
 
   useEffect(() => {
     const itemListRef = collection(db, "SnapLearn");
@@ -39,14 +39,27 @@ function PlayScreen({ setIsQuizActive }) {
       return;
     }
 
-    const shuffledWords = words.sort(() => 0.5 - Math.random()).slice(0, 5);
-    setCurrentQuestionIndex(0);
+    const shuffledWords = words.sort(() => 0.5 - Math.random());
+    setRemainingQuestions(shuffledWords);
     scoreRef.current = 0;
     setFeedback("");
     setIsQuizStarted(true);
     setIsQuizActive(true);
-    setCurrentQuestion(shuffledWords[0]);
-    setOptions(generateOptions(shuffledWords[0]));
+    loadNextQuestion(shuffledWords);
+  };
+
+  const loadNextQuestion = (questions) => {
+    if (questions.length === 0) {
+      setIsQuizStarted(false);
+      setIsQuizActive(false);
+      Alert.alert("Quiz Finished", `You scored ${scoreRef.current} points!`);
+      return;
+    }
+
+    const current = questions[0];
+    setCurrentQuestion(current);
+    setOptions(generateOptions(current));
+    setRemainingQuestions(questions.slice(1));
   };
 
   const handleAnswer = (answer) => {
@@ -62,22 +75,8 @@ function PlayScreen({ setIsQuizActive }) {
     }
     setTimeout(() => {
       setFeedback("");
-      moveToNextQuestion();
+      loadNextQuestion(remainingQuestions);
     }, 1000);
-  };
-
-  const moveToNextQuestion = () => {
-    if (currentQuestionIndex >= 4) {
-      setIsQuizStarted(false);
-      setIsQuizActive(false);
-      Alert.alert("Quiz Finished", `You scored ${scoreRef.current} points!`);
-      return;
-    }
-
-    const newIndex = currentQuestionIndex + 1;
-    setCurrentQuestionIndex(newIndex);
-    setCurrentQuestion(words[newIndex]);
-    setOptions(generateOptions(words[newIndex]));
   };
 
   const generateOptions = (questionWord) => {
