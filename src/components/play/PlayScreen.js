@@ -1,68 +1,152 @@
-import React from "react";
-import { View, Text, FlatList, Button } from "react-native";
-import styles from "./Styles";
-import { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
+import { View, Text, TouchableOpacity, Alert } from "react-native";
+import { useNavigation } from "@react-navigation/native";
 import { db } from "../../firebase/Firebase";
 import { collection, onSnapshot } from "firebase/firestore";
-import { addMiss, addHit } from "../../firebase/Repository";
+import { addHit, addMiss } from "../../firebase/Repository";
+import styles from "./Styles";
 
-function PlayScreen() {
+function PlayScreen({ setIsQuizActive }) {
+  const navigation = useNavigation();
+  const [isQuizStarted, setIsQuizStarted] = useState(false);
   const [words, setWords] = useState([]);
+  const [currentQuestionIndex, setCurrentQuestionIndex] = useState(0);
+  const [currentQuestion, setCurrentQuestion] = useState(null);
+  const [feedback, setFeedback] = useState("");
+  const [feedbackColor, setFeedbackColor] = useState('black');
+  const [options, setOptions] = useState([]);
+  const scoreRef = useRef(0);
 
-  // Nazmul, you should use this code to get the list of words from the database.
-  // This code is going to provide a updated list of words from the database every time the list changes.
-  // That is, if a new word is added/removed to the database, this code will automatically update the list of words.
   useEffect(() => {
     const itemListRef = collection(db, "SnapLearn");
 
     const subscriber = onSnapshot(itemListRef, {
       next: (snapshot) => {
-        const words = [];
-        snapshot.docs.forEach((doc) => {
-          words.push({
-            id: doc.id,
-            ...doc.data(),
-          });
-        });
-        setWords(words);
+        const fetchedWords = snapshot.docs.map(doc => ({
+          id: doc.id,
+          ...doc.data(),
+        }));
+        setWords(fetchedWords);
       },
     });
+
+    return () => subscriber();
   }, []);
 
-  // How to add a hit to a word
-  const handleAddHit = async (word) => {
-    addHit(word);
+  const startQuiz = () => {
+    if (words.length < 4) {
+      Alert.alert("Please add at least 4 words to start the quiz.");
+      return;
+    }
+
+    const shuffledWords = words.sort(() => 0.5 - Math.random()).slice(0, 5);
+    setCurrentQuestionIndex(0);
+    scoreRef.current = 0;
+    setFeedback("");
+    setIsQuizStarted(true);
+    setIsQuizActive(true);
+    setCurrentQuestion(shuffledWords[0]);
+    setOptions(generateOptions(shuffledWords[0]));
   };
 
-  // How to add a miss to a word
-  const handleAddMiss = async (word) => {
-    addMiss(word);
+  const handleAnswer = (answer) => {
+    if (answer === currentQuestion.word) {
+      setFeedback("Correct!");
+      setFeedbackColor("green");
+      scoreRef.current += 1;
+      logHit(currentQuestion);
+    } else {
+      setFeedback("Incorrect!");
+      setFeedbackColor("red");
+      logMiss(currentQuestion);
+    }
+    setTimeout(() => {
+      setFeedback("");
+      moveToNextQuestion();
+    }, 1000);
   };
+
+  const moveToNextQuestion = () => {
+    if (currentQuestionIndex >= 4) {
+      setIsQuizStarted(false);
+      setIsQuizActive(false);
+      Alert.alert("Quiz Finished", `You scored ${scoreRef.current} points!`);
+      return;
+    }
+
+    const newIndex = currentQuestionIndex + 1;
+    setCurrentQuestionIndex(newIndex);
+    setCurrentQuestion(words[newIndex]);
+    setOptions(generateOptions(words[newIndex]));
+  };
+
+  const generateOptions = (questionWord) => {
+    const options = words
+      .filter(word => word.id !== questionWord.id)
+      .sort(() => 0.5 - Math.random())
+      .slice(0, 3)
+      .concat(questionWord)
+      .sort(() => 0.5 - Math.random());
+
+    return options;
+  };
+
+  const logHit = async (word) => {
+    await addHit(word);
+  };
+
+  const logMiss = async (word) => {
+    await addMiss(word);
+  };
+
+  const exitQuiz = () => {
+    Alert.alert("Exit Quiz", "Are you sure you want to exit the quiz?", [
+      { text: "Cancel", style: "cancel" },
+      {
+        text: "Yes", onPress: () => {
+          setIsQuizStarted(false);
+          setIsQuizActive(false);
+          navigation.navigate('Play');
+        }
+      }
+    ]);
+  };
+
+  if (!isQuizStarted) {
+    return (
+      <View style={styles.container}>
+        <TouchableOpacity style={styles.startButton} onPress={startQuiz}>
+          <Text style={styles.startButtonText}>Start Quiz</Text>
+        </TouchableOpacity>
+      </View>
+    );
+  }
+
+  if (!currentQuestion) {
+    return (
+      <View style={styles.container}>
+        <Text style={styles.questionText}>Loading...</Text>
+      </View>
+    );
+  }
 
   return (
-    <View style={styles.container}>
-      <Text>Words available to be used in the game:</Text>
-      <FlatList
-        data={words}
-        renderItem={({ item }) => (
-          <View>
-            <Text>Word: {item.word}</Text>
-            <Text>Hits: {item.hits}</Text>
-            <Text>Misses: {item.misses}</Text>
-            <Text>Definition: {item.definition}</Text>
-            <Button
-              title="Hit"
-              onPress={() => handleAddHit(item)}
-              color="tomato"
-            />
-            <Button
-              title="Miss"
-              onPress={() => handleAddMiss(item)}
-              color="tomato"
-            />
-          </View>
-        )}
-      />
+    <View style={styles.quizContainer}>
+      <Text style={styles.questionText}>{currentQuestion.definition}</Text>
+      {options.map(word => (
+        <TouchableOpacity
+          key={word.id}
+          style={styles.answerButton}
+          onPress={() => handleAnswer(word.word)}
+        >
+          <Text style={styles.answerText}>{word.word}</Text>
+        </TouchableOpacity>
+      ))}
+      {feedback ? <Text style={[styles.feedbackText, { color: feedbackColor }]}>{feedback}</Text> : null}
+      <Text style={styles.scoreText}>Score: {scoreRef.current}</Text>
+      <TouchableOpacity style={styles.exitButton} onPress={exitQuiz}>
+        <Text style={styles.exitButtonText}>Exit</Text>
+      </TouchableOpacity>
     </View>
   );
 }

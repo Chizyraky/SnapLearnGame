@@ -1,4 +1,4 @@
-import React from "react";
+import React, { useState } from "react";
 import { createBottomTabNavigator } from "@react-navigation/bottom-tabs";
 import WordsScreen from "../components/words/WordsScreen";
 import PlayScreen from "../components/play/PlayScreen";
@@ -9,8 +9,8 @@ import { logoutUser } from "../firebase/Authentication";
 const Tab = createBottomTabNavigator();
 
 function AppNavigator({ user }) {
-  // This should be removed at some point. This is just to let you know that the user is being passed to the AppNavigator.
-  console.info("user:", user.uid);
+  const [isQuizActive, setIsQuizActive] = useState(false);
+
   return (
     <Tab.Navigator
       screenOptions={({ route }) => ({
@@ -33,10 +33,31 @@ function AppNavigator({ user }) {
             Logout
           </Text>
         ),
+        tabBarStyle: {
+          display: isQuizActive && route.name === 'Words' ? 'none' : 'flex'
+        },
       })}
     >
-      <Tab.Screen name="Words" component={WordsScreen} />
-      <Tab.Screen name="Play" component={PlayScreen} />
+      {isQuizActive ? (
+        <Tab.Screen
+          name="Play"
+          children={() => <PlayScreen setIsQuizActive={setIsQuizActive} />}
+        />
+      ) : (
+        <>
+          <Tab.Screen
+            name="Words"
+            component={WordsScreen}
+            listeners={{
+              focus: () => setIsQuizActive(false),
+            }}
+          />
+          <Tab.Screen
+            name="Play"
+            children={() => <PlayScreen setIsQuizActive={setIsQuizActive} />}
+          />
+        </>
+      )}
     </Tab.Navigator>
   );
 }
